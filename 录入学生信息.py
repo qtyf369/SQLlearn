@@ -9,7 +9,6 @@ from PyQt5.QtCore import Qt
 # 3. 导入数据处理和 MySQL 相关库
 import pandas as pd
 import pymysql
-from sqlalchemy import create_engine
 from sqlalchemy import create_engine, text  # 新增 text 函数
 
 # 4. MySQL 连接配置（必须改成你的真实信息！）
@@ -75,7 +74,11 @@ class StudentInfoApp(QMainWindow):
         self.submit_btn = QPushButton("提交信息")  # 按钮
         self.submit_btn.clicked.connect(self.submit_student)  # 按钮绑定点击事件（点按钮就执行 submit_student 方法）
         input_layout.addWidget(self.submit_btn)
-
+        # （6）手动刷新按钮
+        self.refresh_btn = QPushButton("刷新")
+        self.refresh_btn.clicked.connect(self.load_data)  # 按钮绑定点击事件（点按钮就执行 load_data 方法）
+        input_layout.addWidget(self.refresh_btn)
+        
         # 把录入区域加入主布局（垂直布局的上方）
         main_layout.addLayout(input_layout)
 
@@ -96,7 +99,20 @@ class StudentInfoApp(QMainWindow):
     def create_table(self):
         try:
             with engine.connect() as conn:
+                check_sql = text("""
+                SELECT TABLE_NAME 
+                FROM information_schema.TABLES 
+                WHERE TABLE_SCHEMA = :db_name  -- 数据库名（student_db）
+                  AND TABLE_NAME = :table_name  -- 表名（student_info）
+            """)
+            # 传递参数（避免 SQL 注入，更规范）
+                result = conn.execute(
+                    check_sql,
+                    {"db_name": MYSQL_DB, "table_name": "student_info"}
+            ).fetchone()  # fetchone()：有结果返回表名，无结果返回 None
+
                 # 1. 定义SQL语句（确保格式正确，无多余符号）
+            if result is None:   
                 create_sql = """
     CREATE TABLE IF NOT EXISTS student_info (
     学号 CHAR(4) PRIMARY KEY,
