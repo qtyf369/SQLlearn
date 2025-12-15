@@ -9,16 +9,16 @@ from sqlalchemy.types import DATE
 import sys
 from datetime import datetime
 #可视化界面
-
+from PyQt5.QtGui import QFont, QColor
 # 优化后的导入（合并成一行，新增组件直接加在后面）
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget,
     QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QTableWidget,
     QTableWidgetItem, QMessageBox,
-    QComboBox, QDateEdit, QTextEdit,QSpinBox,QDialog  # 新增的高频组件
+    QComboBox, QDateEdit, QTextEdit,QSpinBox,QDialog,QListWidget,QListWidgetItem  # 新增的高频组件
 )
-from PyQt5.QtCore import Qt,QDate
+from PyQt5.QtCore import Qt,QDate,QSize  
 
 
 MYSQL_HOST = "localhost"       # 本地 MySQL 地址（默认都是 localhost，不用改）
@@ -171,13 +171,14 @@ class FollowUpClientWindow(QDialog):
         super().__init__(parent)
         self.setWindowTitle("跟进客户")
         self.selected_id = selected_id
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
         self.init_ui()
 
     def init_ui(self):
         """跟进客户窗口的界面初始化"""
         # 设置窗口属性
         self.setWindowTitle("跟进客户")
-        self.setFixedSize(600, 400)  # 固定大小，避免缩放
+        self.setFixedSize(800, 600)  # 固定大小，避免缩放
         #从数据库获取客户信息
         with engine.connect() as conn:
             cursor = conn.connection.cursor(pymysql.cursors.DictCursor) # 使用字典游标，返回结果为字典格式
@@ -200,46 +201,31 @@ class FollowUpClientWindow(QDialog):
         info_layout.addWidget(self.id_text)
         main_layout.addLayout(info_layout)
         info_layout2 = QHBoxLayout()  # 水平布局：组件从左到右排列（标签和输入框并排）
-        info_layout2.addWidget(QLabel("客户名字："))
+        info_layout.addWidget(QLabel("客户名字："))
         self.name_text = QLineEdit()
         self.name_text.setText(self.name_sqltext)
         self.name_text.setReadOnly(True)  # 设置为只读模式
-        info_layout2.addWidget(self.name_text)
-        main_layout.addLayout(info_layout2)
+        info_layout.addWidget(self.name_text)
         info_layout3 = QHBoxLayout()  # 水平布局：组件从左到右排列（标签和输入框并排）
-        info_layout3.addWidget(QLabel("客户国家："))
+        info_layout2.addWidget(QLabel("客户国家："))
         self.country_text = QLineEdit()
         self.country_text.setText(self.country_sqltext)
         self.country_text.setReadOnly(True)  # 设置为只读模式
-        info_layout3.addWidget(self.country_text)
+        info_layout2.addWidget(self.country_text)
         main_layout.addLayout(info_layout3)
 
-        
-      
-        info_layout5 = QHBoxLayout()  # 水平布局：组件从左到右排列（标签和输入框并排）
-        info_layout5.addWidget(QLabel("客户等级："))
+        info_layout2.addWidget(QLabel("客户等级："))
         self.grade_text = QLineEdit()
         self.grade_text.setText(self.grade_sqltext)
         self.grade_text.setReadOnly(True)  # 设置为只读模式
-        info_layout5.addWidget(self.grade_text)
-        main_layout.addLayout(info_layout5)
-        info_layout6 = QHBoxLayout()  # 水平布局：组件从左到右排列（标签和输入框并排）
-        info_layout6.addWidget(QLabel("上一次跟进时间："))
-        self.last_follow_up_text = QLineEdit()
-
-
-        self.last_follow_up_text.setText(self.last_followup_sqltext.strftime("%Y-%m-%d"))
-        self.last_follow_up_text.setReadOnly(True)  # 设置为只读模式
-        info_layout6.addWidget(self.last_follow_up_text)
-        main_layout.addLayout(info_layout6)
-        info_layout7 = QHBoxLayout()  # 水平布局：组件从左到右排列（标签和输入框并排）
-        info_layout7.addWidget(QLabel("跟进记录："))
-        self.follow_up_record_text = QTextEdit()
-        self.follow_up_record_text.setMaximumHeight(70)
-        self.follow_up_record_text.setText(self.follow_up_record_sqltext)
+        info_layout2.addWidget(self.grade_text)
+        main_layout.addLayout(info_layout2)
         
-        info_layout7.addWidget(self.follow_up_record_text)
-        main_layout.addLayout(info_layout7)
+        # 跟进时间轴
+        client_timeline = TimeLineWidget(self, self.selected_id)
+        main_layout.addWidget(client_timeline)
+
+      
         
         #保存按钮
         info_layout8 = QHBoxLayout()  # 水平布局：组件从左到右排列（标签和输入框并排）
@@ -266,6 +252,159 @@ class FollowUpClientWindow(QDialog):
         print(follow_up_record)
         self.close()
         self.parent().load_data()  # 刷新父窗口的表格数据
+
+#时间轴类
+class TimeLineWidget(QWidget):
+    def __init__(self, parent=None, selected_id=None):
+        super().__init__(parent)
+        self.selected_id = selected_id
+        self.init_ui()
+
+    def init_ui(self):
+        # 创建跟进时间轴
+        # 1. 布局：垂直布局（标题 + 时间轴列表）
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(20, 20, 20, 20)
+
+        # 2. 时间轴标题
+        self.title_label = QLabel("客户跟进时间轴")
+        self.title_label.setFont(QFont("微软雅黑", 14, QFont.Bold))
+        self.title_label.setStyleSheet("color: #2C3E50;")
+        self.layout.addWidget(self.title_label)
+
+        # 3. 时间轴核心组件：QListWidget（关键修复：加 position: relative）
+        self.time_line_list = QListWidget()
+        self.time_line_list.setStyleSheet("""
+                  QListWidget {
+                border: none;
+                background-color: transparent;
+                padding: 0;
+                
+            }
+            QListWidget::item {
+                border-left: 2px solid #3498DB;
+                padding-left: 20px;
+                position: relative;  /* 圆点定位必须 */
+            }
+            QListWidget::item:hover {
+                background-color: #F8F9FA;
+            }
+            QListWidget::item::before {
+                position: absolute;
+                left: -10px;
+                top: 10px;
+                width: 16px;
+                height: 16px;
+                border-radius: 8px;
+                background-color: #3498DB;
+            }
+        """)
+        self.layout.addWidget(self.time_line_list)
+        self.load_time_line(self.selected_id)
+       #创建按钮布局
+        btn_layout = QHBoxLayout()
+        
+        # （2）创建按钮1：添加跟进记录
+        self.add_btn = QPushButton("添加跟进记录")
+        self.add_btn.setStyleSheet("""
+            QPushButton {
+                padding: 6px 15px;
+                background-color: #3498DB;
+                color: white;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #2980B9;
+            }
+        """)
+        btn_layout.addWidget(self.add_btn)
+        self.layout.addLayout(btn_layout)
+    def load_time_line(self, customer_id):
+        """加载指定客户的跟进记录，生成时间轴"""
+        follow_records = self.query_follow_records(customer_id)
+        if follow_records.empty:
+            self.add_empty_item()
+            return
+
+        self.time_line_list.clear()
+        # 修复：用 _ 忽略无用的 idx（不影响功能，但规范）
+        for _, row in follow_records.iterrows():
+            self.add_time_line_item(row["跟进时间"], row["跟进情况"])
+
+    def query_follow_records(self, customer_id):
+        """查询客户的所有跟进记录（按时间倒序）"""
+        try:
+            with engine.connect() as conn:
+                df = pd.read_sql(
+                    text("""
+                        SELECT 跟进时间, 跟进情况 
+                        FROM follow_up_record 
+                        WHERE Id = :customer_id 
+                        ORDER BY 跟进时间 DESC
+                    """),
+                    conn,
+                    params={"customer_id": customer_id}
+                )
+            return df
+        except Exception as e:
+            print(f"查询跟进记录失败：{str(e)}")
+            return pd.DataFrame()
+
+    def add_time_line_item(self, follow_time, follow_content):
+        """添加单个时间轴节点（解决右侧留白+垂直居中）"""
+        item = QListWidgetItem(self.time_line_list)
+
+        # 1. 先创建 widget 和布局，添加所有组件
+        widget = QWidget()
+        widget.setStyleSheet("background-color: white;")
+        h_layout = QHBoxLayout(widget)
+        
+        h_layout.setContentsMargins(0, 3, 0, 3)  # 上下内边距不变
+        h_layout.setSpacing(15)  # 时间和内容的横向间距不变
+        h_layout.setAlignment(Qt.AlignVCenter)  # 垂直居中
+
+        # 时间标签（不变，固定宽度180px）
+        time_label = QLabel(follow_time.strftime("%Y-%m-%d %H:%M:%S"))
+        time_label.setFont(QFont("微软雅黑", 10, QFont.Bold))
+        time_label.setStyleSheet("color: #E74C3C; background-color: transparent;")
+        time_label.setFixedWidth(180)
+        time_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        h_layout.addWidget(time_label)
+
+        # 跟进内容标签（关键修改：解决右侧留白）
+        content_label = QLabel(follow_content)
+        content_label.setFont(QFont("微软雅黑", 10))
+        content_label.setStyleSheet("color: #34495E; background-color: transparent;")
+        content_label.setWordWrap(True)  # 自动换行保留
+        content_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)  # 垂直居中+左对齐
+        content_label.setMinimumWidth(400)
+        # 关键1：去掉固定 maximumWidth，改用拉伸因子让内容占满剩余空间
+        # content_label.setMaximumWidth(self.time_line_list.width() - 200)  # 删掉这行！
+        h_layout.addWidget(content_label)
+        # 关键2：给 content_label 加拉伸因子（1=占满所有剩余空间）
+        h_layout.setStretchFactor(content_label, 1)
+
+        # 2. 计算 widget 高度
+        widget.adjustSize()
+        # 关键3：让 item 宽度自适应 QListWidget（不限制宽度）
+        item.setSizeHint(QSize(self.time_line_list.width() - 20, widget.height()))  # 减20px避免贴边
+
+        # 3. 把 widget 嵌入 item
+        self.time_line_list.setItemWidget(item, widget)
+    def add_empty_item(self):
+        """无跟进记录时显示提示（修复3：不覆盖全局样式）"""
+        item = QListWidgetItem("暂无跟进记录")
+        # 修复3：直接给 Item 设样式（不用 QListWidget::item 选择器，避免冲突）
+        item.setStyleSheet("""
+            color: #95A5A6;
+            font-size: 12px;
+            text-align: center;
+            border: none;  /* 取消竖线 */
+        """)
+        # 让提示居中显示（设置 Item 高度，避免太矮）
+        item.setSizeHint(QSize(0, 60))
+        self.time_line_list.addItem(item)
 
 class ClientInfoApp(QMainWindow):
     def __init__(self):
@@ -418,8 +557,8 @@ class ClientInfoApp(QMainWindow):
     }
         /* 选中行样式（可选，和 hover 区分） */
         QTableWidget::item:selected {
-            background-color: ##1d83c0;  /* 选中行背景色（比 hover 深一点） */
-            color: #0c5460;              /* 选中行文字色 */
+            background-color: #1d83c0;  /* 选中行背景色（比 hover 深一点） */
+            color: #ffffff;              /* 选中行文字色 */
         }
         /* 行交替颜色（可选，配合 hover 更易读） */
         QTableWidget {
