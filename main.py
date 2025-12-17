@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem, QMessageBox,
     QComboBox, QDateEdit, QTextEdit,QSpinBox,QDialog,QListWidget,QListWidgetItem,QDateTimeEdit  # 新增的高频组件
 )
-from PyQt5.QtCore import Qt,QDate,QSize,QDateTime,QTimer  
+from PyQt5.QtCore import Qt,QDate,QSize,QDateTime,QTimer,QEvent  
 
 
 MYSQL_HOST = "localhost"       # 本地 MySQL 地址（默认都是 localhost，不用改）
@@ -241,6 +241,12 @@ class TimeLineWidget(QWidget):
         self.is_edit_mode = False # 是否为编辑模式，默认新增模式，用这个区分该怎么操作
         self.init_ui()
         # 关键：提供给父亲调用的“停止定时器”方法，这样主窗口关闭时也能停止定时器
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.MouseButtonPress:
+            # 把点击事件转发给 QListWidget，触发整行选中
+            QApplication.sendEvent(self.time_line_list, event)
+        return False        
     def stop_timer(self):
         if hasattr(self, 'time_timer') and self.time_timer.isActive():
             self.time_timer.stop()
@@ -537,7 +543,10 @@ class TimeLineWidget(QWidget):
         time_label.setFont(QFont("微软雅黑", 10, QFont.Bold))
         time_label.setStyleSheet("color: #E74C3C; background-color: transparent;")
         time_label.setFixedWidth(180)
-        time_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        time_label.setTextInteractionFlags(Qt.TextSelectableByMouse)  # 允许鼠标选择
+        time_label.setCursor(Qt.IBeamCursor)  # 鼠标悬停时显示文本光标（可选，更友好）
+        #事件过滤，点击时间标签也能选中整行
+        time_label.installEventFilter(self)
         h_layout.addWidget(time_label)
 
         # 跟进内容标签（关键修改：解决右侧留白）
@@ -547,8 +556,10 @@ class TimeLineWidget(QWidget):
         content_label.setWordWrap(True)  # 自动换行保留
         content_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)  # 垂直居中+左对齐
         content_label.setMinimumWidth(400)
-        # 关键1：去掉固定 maximumWidth，改用拉伸因子让内容占满剩余空间
-        # content_label.setMaximumWidth(self.time_line_list.width() - 200)  # 删掉这行！
+        content_label.setTextInteractionFlags(Qt.TextSelectableByMouse)  # 允许鼠标选择
+        content_label.setCursor(Qt.IBeamCursor)  # 鼠标悬停时显示文本光标（可选，更友好）
+        #事件过滤，点击内容标签也能选中整行
+        content_label.installEventFilter(self)
         h_layout.addWidget(content_label)
         # 关键2：给 content_label 加拉伸因子（1=占满所有剩余空间）
         h_layout.setStretchFactor(content_label, 1)
