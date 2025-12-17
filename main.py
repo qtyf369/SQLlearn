@@ -231,39 +231,16 @@ class FollowUpClientWindow(QDialog):
 
       
         
-        # #保存按钮
-        # info_layout8 = QHBoxLayout()  # 水平布局：组件从左到右排列（标签和输入框并排）
-        # self.save_button = QPushButton("保存")
-        # self.save_button.clicked.connect(self.save_follow_up)
-        # info_layout8.addWidget(self.save_button)
-        # main_layout.addLayout(info_layout8)
-
-    # def save_follow_up(self):
-    #     """保存跟进记录"""
-    #     follow_up_record = self.follow_up_record_text.toPlainText()
-    #     if not follow_up_record:
-    #         QMessageBox.warning(self, "提示", "请输入跟进记录！")
-    #         return
-    #     with engine.connect() as conn:
-    # # 占位符改成 :follow_up 和 :id（命名格式）
-    #         conn.execute(
-    #             text("UPDATE new_quote SET `跟进情况`=:follow_up WHERE `Id`=:id"),
-    #     # 传参用字典，key 对应占位符的变量名
-    #             {"follow_up": follow_up_record, "id": self.selected_id}
-    # )
-    #         conn.commit()
-    #     QMessageBox.information(self, "提示", "跟进记录已保存！")
-    #     print(follow_up_record)
-    #     self.close()
-    #     self.parent().load_data()  # 刷新父窗口的表格数据
+       
 
 #时间轴类
 class TimeLineWidget(QWidget):
     def __init__(self, parent=None, selected_id=None):
         super().__init__(parent)
         self.selected_id = selected_id
+        self.is_edit_mode = False # 是否为编辑模式，默认新增模式，用这个区分该怎么操作
         self.init_ui()
-        # 关键：提供给父亲调用的“停止定时器”方法
+        # 关键：提供给父亲调用的“停止定时器”方法，这样主窗口关闭时也能停止定时器
     def stop_timer(self):
         if hasattr(self, 'time_timer') and self.time_timer.isActive():
             self.time_timer.stop()
@@ -278,7 +255,7 @@ class TimeLineWidget(QWidget):
         # 1. 布局：垂直布局（标题 + 时间轴列表）
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(20, 20, 20, 20)
-
+    
         # 2. 时间轴标题
         self.title_label = QLabel("客户跟进时间轴")
         self.title_label.setFont(QFont("微软雅黑", 14, QFont.Bold))
@@ -312,6 +289,8 @@ class TimeLineWidget(QWidget):
                 background-color: #3498DB;
             }
         """)
+        # 时间轴列表初始化后，绑定信号
+        self.time_line_list.itemSelectionChanged.connect(self.highlight_selected_item) #选中高亮
         self.layout.addWidget(self.time_line_list)
 
         #下方加输入区
@@ -368,8 +347,7 @@ class TimeLineWidget(QWidget):
         self.cancel_btn.clicked.connect(self.hide_follow_input)
         self.save_btn.clicked.connect(self.save_follow_up)
         input_layout.addLayout(btn_layout)
-        #点击保存按钮，调用save_follow_up方法
-        # self.save_btn.clicked.connect(self.save_follow_up)
+        
         # 把输入区添加到主布局（和时间轴平级）
         self.layout.addWidget(self.follow_input_widget)
         self.load_time_line(self.selected_id)
@@ -412,19 +390,30 @@ class TimeLineWidget(QWidget):
         """)
         btn_layout.addWidget(self.edit_btn)
         self.add_btn.clicked.connect(self.show_follow_input)
-        # self.edit_btn.clicked.connect(self.edit_follow_up)
+        self.edit_btn.clicked.connect(self.edit_follow_up)
+        #开始都显示，有输入框时隐藏
+        self.add_btn.setVisible(True)
+        self.edit_btn.setVisible(True)
         self.layout.addLayout(btn_layout)
     # 显示输入区时启动定时器，隐藏时停止（节省资源）
     def show_follow_input(self):
         self.follow_input_widget.setVisible(True)
-        # 先清空输入框内容（防止上次编辑内容残留在输入区）
-        self.follow_time_edit.setDateTime(QDateTime.currentDateTime())
-        self.follow_content_edit.clear()
-        self.time_timer.start()  # 启动定时器，实时更新
+        #判断是否为编辑模式,如果是的话，只需要显示出来，其他逻辑在别的函数里写
+        self.add_btn.setVisible(False)
+        self.edit_btn.setVisible(False)
+        if not self.is_edit_mode:
+            # 新增模式下，清空输入框内容
+            self.follow_time_edit.setDateTime(QDateTime.currentDateTime())
+            self.follow_content_edit.clear()
+            self.time_timer.start()  # 启动定时器，实时更新
+      
 
     def hide_follow_input(self):
         self.follow_input_widget.setVisible(False)
         self.time_timer.stop()  # 停止定时器
+        self.is_edit_mode = False #关闭编辑模式
+        self.add_btn.setVisible(True)
+        self.edit_btn.setVisible(True)
     def save_follow_up(self):
         """保存跟进记录"""
         follow_content = self.follow_content_edit.toPlainText().strip()
@@ -436,35 +425,65 @@ class TimeLineWidget(QWidget):
         qdatetime = self.follow_time_edit.dateTime()
         follow_time = qdatetime.toPyDateTime()# 转换为Python datetime对象，适配SQL存储
         # 数据库操作
-        try:
-            with engine.connect() as conn:
-                conn.execute(
-                    text("""
-                        INSERT INTO follow_up_record (Id, 跟进时间, 跟进情况)
-                        VALUES (:customer_id, :follow_time, :follow_content)
-                    """),
-                    {"customer_id": self.selected_id,
-                     "follow_time": follow_time,
-                     "follow_content": follow_content}
-                )
-                conn.execute(
-            text("""
-                UPDATE new_quote 
-                SET 最近跟进日期 = :follow_time, 跟进情况 = :follow_content
-                WHERE Id = :customer_id
-            """),
-            {"customer_id": self.selected_id, "follow_time": follow_time, "follow_content": follow_content}
-        )
+        if self.is_edit_mode:
+            # 编辑模式下，更新跟进记录
+            #先拆分edit_key,获取original_time
+            original_time_str = self.current_edit_key.split("_")[1]
+            original_time = datetime.strptime(original_time_str, "%Y-%m-%d %H:%M:%S") 
+           
+            try:
+                with engine.connect() as conn:
+                    conn.execute(
+                        text("""
+                            UPDATE follow_up_record 
+                            SET 跟进时间 = :follow_time, 跟进情况 = :follow_content
+                            WHERE Id = :customer_id AND 跟进时间 = :original_time
+                        """),
+                        {"customer_id": self.selected_id,
+                         "follow_time": follow_time,
+                         "follow_content": follow_content,
+                         "original_time": original_time}
+                    )
+                    conn.commit()
+                    QMessageBox.information(self, "成功", "跟进记录已更新！")
+                    self.hide_follow_input()
+                    self.load_time_line(self.selected_id)
+                    #主窗口也要刷新
+                    self.parent().parent().load_data() #外层主窗口刷新
+                    self.is_edit_mode = False #编辑模式结束，切换为新增模式
+            except Exception as e:
+                QMessageBox.warning(self, "更新失败", f"数据库操作失败：{str(e)}")
+                conn.rollback()
+        else:
+            try:
+                with engine.connect() as conn:
+                    conn.execute(
+                        text("""
+                            INSERT INTO follow_up_record (Id, 跟进时间, 跟进情况)
+                            VALUES (:customer_id, :follow_time, :follow_content)
+                        """),
+                        {"customer_id": self.selected_id,
+                        "follow_time": follow_time,
+                        "follow_content": follow_content}
+                    )
+                    conn.execute(
+                text("""
+                    UPDATE new_quote 
+                    SET 最近跟进日期 = :follow_time, 跟进情况 = :follow_content
+                    WHERE Id = :customer_id
+                """),
+                {"customer_id": self.selected_id, "follow_time": follow_time, "follow_content": follow_content}
+            )
 
-                conn.commit()
-                QMessageBox.information(self, "成功", "跟进记录已保存！")
-                self.hide_follow_input()
-                self.load_time_line(self.selected_id)
-                #主窗口也要刷新
-                self.parent().parent().load_data()
-        except Exception as e:
-            QMessageBox.warning(self, "保存失败", f"数据库操作失败：{str(e)}")
-            conn.rollback()
+                    conn.commit()
+                    QMessageBox.information(self, "成功", "跟进记录已保存！")
+                    self.hide_follow_input()
+                    self.load_time_line(self.selected_id)
+                    #主窗口也要刷新
+                    self.parent().parent().load_data()
+            except Exception as e:
+                QMessageBox.warning(self, "保存失败", f"数据库操作失败：{str(e)}")
+                conn.rollback()
     # 4. 时间更新方法（把控件时间设为当前系统时间）
     def update_time(self):
         self.follow_time_edit.setDateTime(QDateTime.currentDateTime())
@@ -541,27 +560,38 @@ class TimeLineWidget(QWidget):
 
         # 3. 把 widget 嵌入 item
         self.time_line_list.setItemWidget(item, widget)
-    #添加跟进记录逻辑
-    # def add_follow_up(self):
-    #     """添加跟进记录"""
-    #     follow_time = QDateTime.currentDateTime()
-    #     follow_content = self.follow_content_input.text()
-    #     if not follow_content.strip():
-    #         QMessageBox.warning(self, "输入错误", "请输入跟进内容")
-    #         return
-    #     with engine.connect() as conn:
-    #         conn.execute(
-    #             text("""
-    #                 INSERT INTO follow_up_record (Id, 跟进时间, 跟进情况)
-    #                 VALUES (:customer_id, :follow_time, :follow_content)
-    #             """),
-    #             {"customer_id": self.current_customer_id,
-    #              "follow_time": follow_time.toPyDateTime(),
-    #              "follow_content": follow_content}
-    #         )
-    #     self.load_time_line(self.current_customer_id)
-    #     self.follow_content_input.clear()
-
+    
+    def edit_follow_up(self):
+        selected_items = self.time_line_list.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "操作提示","请先选择一条跟进记录")
+            return
+        
+        self.is_edit_mode = True # 切换到编辑模式
+        self.show_follow_input() #打开输入区
+        # 1. 拿到选中的 widget（容器）
+        selected_widget = self.time_line_list.itemWidget(selected_items[0])
+        
+        # 2. 拿到 widget 的布局（你创建的 h_layout）
+        h_layout = selected_widget.layout()  # 就是 add_time_line_item 里的 QHBoxLayout
+        
+        # 3. 按索引取两个标签（和创建顺序一致）itemAt拿到的是QLayoutItem，再调用widget()方法拿到QLabel
+        time_label = h_layout.itemAt(0).widget()  # 第0位：时间标签
+        content_label = h_layout.itemAt(1).widget()  # 第1位：内容标签
+        
+        # 4. 提取时间和内容（核心数据）
+        follow_time_str = time_label.text().strip()  # 拿到 "2025-12-18 10:00:00"
+        follow_content = content_label.text().strip()  # 拿到跟进内容
+        
+        # 5. （后续用）把数据填入输入框，准备编辑
+        # 时间字符串转 QDateTime（适配你的 follow_time_edit 控件）
+        follow_datetime = QDateTime.fromString(follow_time_str, "yyyy-MM-dd HH:mm:ss")
+        self.follow_time_edit.setDateTime(follow_datetime)
+        self.follow_content_edit.setPlainText(follow_content)
+        
+        # 6. 保存当前编辑的唯一标识（后续更新数据库用，内存临时存）
+        # 这里用「客户ID_时间字符串」当唯一标识（确保是某条特定记录）
+        self.current_edit_key = f"{self.selected_id}_{follow_time_str}"
     def add_empty_item(self):
         """无跟进记录时显示提示（修复3：不覆盖全局样式）"""
         item = QListWidgetItem("暂无跟进记录")
@@ -575,7 +605,27 @@ class TimeLineWidget(QWidget):
         # 让提示居中显示（设置 Item 高度，避免太矮）
         item.setSizeHint(QSize(0, 60))
         self.time_line_list.addItem(item)
-
+    def highlight_selected_item(self):
+        # 清除所有节点高亮（恢复默认样式）
+        for i in range(self.time_line_list.count()):
+            item = self.time_line_list.item(i)
+            widget = self.time_line_list.itemWidget(item)
+            # 恢复容器默认背景
+            widget.setStyleSheet("background-color: white;")
+            # 恢复标签默认颜色（按你原始样式），因为我同步修改了标签的样式
+            for label in widget.findChildren(QLabel):
+                if label.text().strip() and ":" in label.text():  # 判断是时间标签（含日期时间格式）
+                    label.setStyleSheet("color: #E74C3C; background-color: transparent;")
+                else:  # 内容标签
+                    label.setStyleSheet("color: #34495E; background-color: transparent;")
+        
+        # 给选中项加高亮（必生效）
+        selected_items = self.time_line_list.selectedItems()
+        if selected_items:
+            selected_widget = self.time_line_list.itemWidget(selected_items[0])
+            selected_widget.setStyleSheet("background-color: #1a85ff; border-radius: 8px;")
+            for label in selected_widget.findChildren(QLabel):
+                label.setStyleSheet("color: #e7f2ff; background-color: transparent;")
 class ClientInfoApp(QMainWindow):
     def __init__(self):
         super().__init__()  # 继承 QMainWindow 的所有功能
