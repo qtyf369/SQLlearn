@@ -26,8 +26,11 @@ MYSQL_USER = "root"            # 你的 MySQL 用户名（默认一般是 root�
 MYSQL_PASSWORD = "123456"  # 替换成你安装 MySQL 时的密码（比如 123456）
 MYSQL_DB = "client_db"        # 咱们之前创建的数据库名（必须和这个一致）
 
-# 5. 创建 MySQL 连接通道（engine）
-engine = create_engine(f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}/{MYSQL_DB}")
+#sqlite数据库引擎
+engine = create_engine(
+    "sqlite:///crm.db",
+    connect_args={"check_same_thread": False}  # 解决 SQLite 多线程访问问题（必加）
+)
 
 
 # ---------------------- 1. 定义新窗口类（修改客户） ----------------------
