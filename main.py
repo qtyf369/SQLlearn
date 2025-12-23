@@ -284,7 +284,7 @@ class TimeLineWidget(QWidget):
                 background-color: #F8F9FA;
             }
             QListWidget::item::before {
-                content: '';
+                
                 position: absolute;
                 left: -10px;
                 top: 10px;
@@ -299,13 +299,13 @@ class TimeLineWidget(QWidget):
 
         # 跟进输入区
         self.follow_input_widget = QWidget()
-        self.follow_input_widget.setStyleSheet("""
-            background-color: #f8f9fa;
-            border: 1px solid #2196F3;
-            border-radius: 8px;
-            padding: 15px;
-            margin-top: 10px;
-        """)
+        # self.follow_input_widget.setStyleSheet("""
+            
+        #     border: 1px solid #2196F3;
+        #     border-radius: 8px;
+        #     padding: 15px;
+        #     margin-top: 10px;
+        # """)
         self.follow_input_widget.setVisible(False)
 
         input_layout = QVBoxLayout(self.follow_input_widget) # 跟进输入布局
@@ -324,53 +324,7 @@ class TimeLineWidget(QWidget):
         self.follow_time_edit = QDateTimeEdit(QDateTime.currentDateTime())
         self.follow_time_edit.setCalendarPopup(True)
         self.follow_time_edit.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
-        self.follow_time_edit.setStyleSheet("""
-            QDateTimeEdit {
-                height: 28px;
-                padding: 0 5px;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-            }
-            QDateTimeEdit:focus {
-                border-color: #2196F3;
-                outline: none;
-            }
-        """)
-
-        # 2. 获取日历控件，强制配置（关键修复）
-        calendar = self.follow_time_edit.calendarWidget()
-        # 强制启用导航栏（年/月所在区域，默认可能被隐藏）
-        calendar.setNavigationBarVisible(True)
-        # 显式设置当前年/月，触发渲染
-        current_date = QDate.currentDate()
-        calendar.setCurrentPage(current_date.year(), current_date.month())
-        # 强制设置日历大小，避免被压缩
-        calendar.setMinimumSize(300, 280)
-        calendar.setGridVisible(True)
-
-        # 3. 用 QPalette 设置导航栏颜色（不依赖 QSS 选择器，兼容性100%）
-        palette = calendar.palette()
-        # 设置导航栏背景色（确保可见）
-        palette.setColor(calendar.backgroundRole(), QColor(240, 240, 240))
-        # 设置年/月文字颜色
-        palette.setColor(calendar.foregroundRole(), QColor(51, 51, 51))
-        calendar.setPalette(palette)
-
-        # 4. 强制设置年/月选择框的样式（直接操作子控件）
-        for child in calendar.findChildren(QSpinBox):
-            # 年/月的 SpinBox 控件，强制设置大小和样式
-            child.setMinimumWidth(70)
-            child.setStyleSheet("""
-                QSpinBox {
-                    border: 1px solid #ddd;
-                    border-radius: 4px;
-                    padding: 2px;
-                    background-color: white;
-                }
-                QSpinBox::up-button, QSpinBox::down-button {
-                    background-color: #f5f5f5;
-                }
-            """)
+     
 
         # 5. 最后将 QDateTimeEdit 添加到布局（确保样式已生效）
         time_layout.addWidget(time_label)
